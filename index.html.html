@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تفسير الآية</title>
+<style>
+  :root { --bg:#f6f3ec; --card:#fff; --green:#1f6f54; --ink:#222; --muted:#6b6b6b; --line:#e4ded0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:"Segoe UI",Tahoma,Arial,sans-serif; line-height:1.9; }
+  header { background:var(--green); color:#fff; text-align:center; padding:28px 16px; }
+  header h1 { margin:0 0 6px; font-size:1.7rem; }
+  header p { margin:0; opacity:.85; font-size:.95rem; }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  .search { display:flex; gap:8px; margin-top:-22px; }
+  .search input { flex:1; padding:14px 16px; font-size:1.05rem; border:1px solid var(--line); border-radius:12px; font-family:inherit; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  .search button { padding:0 22px; background:var(--green); color:#fff; border:0; border-radius:12px; font-size:1rem; cursor:pointer; font-family:inherit; }
+  .hint { color:var(--muted); font-size:.85rem; margin:10px 4px 0; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:18px; margin-top:18px; }
+  .verse { font-family:"Amiri","Traditional Arabic",serif; font-size:1.7rem; line-height:2.4; text-align:center; }
+  .ref { text-align:center; color:var(--green); font-weight:600; margin-top:6px; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; }
+  .tabs button { padding:7px 14px; border:1px solid var(--line); background:#faf8f3; border-radius:20px; cursor:pointer; font-family:inherit; }
+  .tabs button.on { background:var(--green); color:#fff; border-color:var(--green); }
+  .tafsir-text { font-size:1.05rem; white-space:pre-wrap; }
+  .source { margin-top:12px; padding-top:10px; border-top:1px dashed var(--line); color:var(--muted); font-size:.88rem; }
+  .result { cursor:pointer; padding:12px 0; border-bottom:1px solid var(--line); }
+  .result:last-child { border:0; }
+  .result:hover { background:#faf8f3; }
+  .result small { color:var(--green); display:block; }
+  .msg { text-align:center; color:var(--muted); margin-top:30px; }
+  .warn { font-size:.8rem; color:var(--muted); text-align:center; margin-top:26px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📖 تفسير الآية</h1>
+  <p>اكتب الآية (أو جزءًا منها) أو رقمها مثل 2:255 وسيظهر لك التفسير والمصدر</p>
+</header>
+<main>
+  <form class="search" id="form">
+    <input id="q" placeholder="مثال: الله لا إله إلا هو الحي القيوم  أو  2:255" autocomplete="off">
+    <button type="submit">بحث</button>
+  </form>
+  <div class="hint">اكتب بدون تشكيل للحصول على أفضل نتيجة.</div>
+  <div id="out"></div>
+  <div class="warn">التفاسير مأخوذة من كتب التفسير المعروفة عبر واجهة alquran.cloud. للفتوى والمسائل الدقيقة ارجع لأهل العلم.</div>
+</main>
+
+<script>
+const API = "https://api.alquran.cloud/v1";
+const TAFSIRS = [
+  { id: "ar.muyassar", name: "التفسير الميسر", author: "مجمع الملك فهد لطباعة المصحف الشريف" },
+  { id: "ar.jalalayn", name: "تفسير الجلالين", author: "جلال الدين المحلي وجلال الدين السيوطي" },
+  { id: "ar.qurtubi",  name: "تفسير القرطبي", author: "الإمام القرطبي" }
+];
+const out = document.getElementById("out");
+const $ = s => document.querySelector(s);
+
+function normalize(s) {
+  return s.replace(/[\u064B-\u065F\u0670\u06D6-\u06ED\u0640]/g, "")
+          .replace(/[أإآٱ]/g, "ا").replace(/ى/g, "ي").replace(/ة/g, "ه").trim();
+}
+const toEn = s => s.replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+const get = async p => { const r = await fetch(API + p); if (!r.ok) throw new Error(r.status); return (await r.json()).data; };
+
+document.getElementById("form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const raw = toEn($("#q").value).trim();
+  if (!raw) return;
+  out.innerHTML = '<div class="msg">جارٍ البحث...</div>';
+  try {
+    if (/^\d{1,3}\s*[:\-/ ]\s*\d{1,3}$/.test(raw)) {
+      const [s, a] = raw.split(/\s*[:\-/ ]\s*/);
+      return showAyah(`${s}:${a}`);
+    }
+    const word = normalize(raw);
+    const data = await get(`/search/${encodeURIComponent(word)}/all/quran-simple`);
+    if (!data.matches || !data.matches.length) { out.innerHTML = '<div class="msg">ما لقيت نتيجة. جرّب كلمات أقل أو أدق.</div>'; return; }
+    const list = data.matches.slice(0, 25);
+    const first = list[0];
+    return showAyah(`${first.surah.number}:${first.numberInSurah}`, list.slice(1), data.count);
+  } catch (err) {
+    out.innerHTML = '<div class="msg">صار خطأ في الاتصال (' + err.message + '). افتح الملف في متصفح عادي مثل Chrome أو Safari وجرّب مرة ثانية.</div>';
+  }
+});
+
+async function showAyah(ref, others = [], total = 0) {
+  out.innerHTML = '<div class="msg">جارٍ تحميل التفسير...</div>';
+  try {
+    const [verse, ...tafs] = await Promise.allSettled([
+      get(`/ayah/${ref}/quran-uthmani`),
+      ...TAFSIRS.map(t => get(`/ayah/${ref}/${t.id}`))
+    ]);
+    if (verse.status !== "fulfilled") throw new Error("not found");
+    const v = verse.value;
+    const sName = v.surah.name.replace("سُورَةُ ", "");
+    let html = `<div class="card"><div class="verse">﴿ ${v.text} ﴾</div><div class="ref">سورة ${sName} — الآية ${v.numberInSurah}</div></div>`;
+    html += `<div class="card"><div class="tabs" id="tabs"></div><div class="tafsir-text" id="ttext"></div><div class="source" id="tsrc"></div></div>`;
+    if (others.length) {
+      html += `<div class="card"><b>آيات أخرى فيها نفس الكلمات (${total}) — اضغط على أي آية لعرض تفسيرها:</b>` +
+        others.map(m => `<div class="result" data-ref="${m.surah.number}:${m.numberInSurah}">${m.text}<small>سورة ${m.surah.name.replace("سُورَةُ ","")} — آية ${m.numberInSurah}</small></div>`).join("") + "</div>";
+    }
+    out.innerHTML = html;
+    out.querySelectorAll(".result").forEach(el => el.onclick = () => showAyah(el.dataset.ref));
+    const tabs = $("#tabs");
+    TAFSIRS.forEach((t, i) => {
+      const b = document.createElement("button");
+      b.textContent = t.name;
+      b.onclick = () => select(i);
+      tabs.appendChild(b);
+    });
+    function select(i) {
+      [...tabs.children].forEach((b, j) => b.classList.toggle("on", i === j));
+      const t = TAFSIRS[i], r = tafs[i];
+      $("#ttext").textContent = r.status === "fulfilled" ? r.value.text : "تعذّر تحميل هذا التفسير (" + (r.reason && r.reason.message ? r.reason.message : "خطأ") + "). افتح الملف في متصفح عادي مثل Chrome أو Safari وجرّب مرة ثانية.";
+      $("#tsrc").textContent = `المصدر: ${t.name} — ${t.author} • سورة ${sName}، الآية ${v.numberInSurah}`;
+    }
+    select(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } catch (err) {
+    out.innerHTML = '<div class="msg">تعذّر تحميل الآية (' + err.message + '). تأكد من الإنترنت وافتح الملف في متصفح عادي مثل Chrome أو Safari.</div>';
+  }
+}
+</script>
+</body>
+</html>
